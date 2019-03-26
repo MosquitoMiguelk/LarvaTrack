@@ -1,0 +1,56 @@
+vReader = vision.VideoFileReader('C:\Users\Miguel\Pictures\Camera Roll\output.mp4');                                             % load reader (change the file path)
+vPlayer1 = vision.VideoPlayer('Position', [0, 250, 1920, 1080]);                                                                 % initialize video player [x, y, xlength, ylength]
+
+net = alexnet;                                                                                                                   % load the pretrained CNN
+
+layers = net.Layers;                                                                                                             % Preparing the CNN for transfer learning 
+fc = fullyConnectedLayer(3);                                                                                                     % 3 categories (larva, pupa, not larva)                  
+layers(23) = fc;                                                                                                                 % replace the pretrained layer with the previously initialize one
+layers(end) = classificationLayer;                                                                                               % resetting the final classification layer
+
+topts = trainingOptions('adam','InitialLearnRate',0.0001);
+
+trainimds = imageDatastore('C:\Users\Miguel\Pictures\MatLab Data\Training','IncludeSubfolders', true, 'LabelSource','foldernames') %load training images with labels by folder name (change file path)
+augTrainimds = augmentedImageDatastore([227 227], trainimds, 'ColorPreprocessing','gray2rgb');                                   %resize the images to work with alexnet's size demands
+
+larvanet = trainNetwork(augTrainimds, layers, topts);                                                                            % train the network with training images, changed layers, and training options
+
+
+detector = vision.ForegroundDetector(...                                                                                         % initialize foreground detector (motion detection)
+           'NumGaussians', 5, ...
+           'NumTrainingFrames', 300, ...
+           'MinimumBackgroundRatio', 0.8);
+
+blobAnalyser = vision.BlobAnalysis(...                                                                                           % initialize blob analysis (form boundng boxes around detected blobs)
+               'BoundingBoxOutputPort', true, ...
+               'LabelMatrixOutputPort', 500, ...
+               'CentroidOutputPort', true, ...   
+               'MinimumBlobArea', 200, ...  
+               'MaximumBlobArea', 600, ...
+               'MaximumCount', 90 );
+      
+              
+while ~isDone(vReader)
+      videoFrame = step(vReader);                                                                                                % increment the video frame by frame
+      
+      frame = vReader.step();                                                                                                    % save frame
+      mask = detector.step(frame);                                                                                               % pass the frame through the foreground detector to establish a mask of moving objects
+            
+      [label, centroids, bboxes] = blobAnalyser.step(mask);                                                                      % pass the mask through the blob analyzer to get a bounding box for the detected objects
+           
+      if ~isempty(bboxes)
+          img = zeros(227, 227, 3);
+          
+          for ii = 1:size(bboxes, 1)
+              img(:, :, :, ii) = imresize(imcrop(frame, bboxes(ii, :)), [227 227]);                                              % crop the frame for each bounding box and resize it to the needed 227 x 227 dimensions
+          end
+          
+          [pred, scores] = classify(larvanet, im2uint8(img));                                                                    % cropped images are classified by the trained neural network 
+                                                                                                                                 % image file types are converted from normalized im values to RGB
+          frame_markers = insertObjectAnnotation(frame, 'rectangle', bboxes, cellstr(pred));                                     % draw the bounding boxes and label it with its prediction
+          vPlayer1.step(frame_markers);
+      end          
+end  
+
+release(vReader)
+release(vPlayer1)
