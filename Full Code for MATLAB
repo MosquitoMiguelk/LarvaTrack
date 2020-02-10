@@ -5,7 +5,7 @@ net = alexnet;                                                                  
 
 layers = net.Layers;                                                                                                             % Preparing the CNN for transfer learning 
 fc = fullyConnectedLayer(3);                                                                                                     % 3 categories (larva, pupa, not larva)                  
-layers(23) = fc;                                                                                                                 % replace the pretrained layer with the previously initialize one
+layers(23) = fc;                                                                                                                 % replace the pretrained layer with the previously initialized one
 layers(end) = classificationLayer;                                                                                               % resetting the final classification layer
 
 topts = trainingOptions('adam','InitialLearnRate',0.0001);
